@@ -13,6 +13,12 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import type { Reservation, ReservationForm, CourtId } from '@/types/reservation';
+import {
+  getCachedAllReservations,
+  setCachedAllReservations,
+  getCachedOccupied,
+  setCachedOccupied,
+} from './reservations-cache';
 
 const COLLECTION = 'reservations';
 
@@ -34,6 +40,11 @@ export async function createReservation(
 
 export async function deleteReservation(id: string): Promise<void> {
   await deleteDoc(doc(db, COLLECTION, id));
+}
+
+/** Consulta todas las reservas (para el dueño: ver todas en cualquier dispositivo) */
+export function allReservationsQuery() {
+  return query(collection(db, COLLECTION), orderBy('date', 'asc'));
 }
 
 export function reservationsByUserQuery(userId: string) {
@@ -81,6 +92,12 @@ export async function getReservationsByDateAndCourt(
   return snap.docs.map((d) => mapDocToReservation(d.id, d.data() as Record<string, unknown>));
 }
 
+function sortReservations(list: Reservation[]): void {
+  list.sort((a, b) =>
+    a.date === b.date ? a.startTime.localeCompare(b.startTime) : a.date.localeCompare(b.date)
+  );
+}
+
 export function subscribeReservationsByUser(
   userId: string,
   onUpdate: (reservations: Reservation[]) => void
@@ -89,7 +106,27 @@ export function subscribeReservationsByUser(
     const list = snap.docs.map((d) =>
       mapDocToReservation(d.id, d.data() as Record<string, unknown>)
     );
-    list.sort((a, b) => (a.date === b.date ? a.startTime.localeCompare(b.startTime) : a.date.localeCompare(b.date)));
+    sortReservations(list);
+    onUpdate(list);
+  });
+}
+
+/** Suscripción a TODAS las reservas con caché: carga primero desde caché y luego actualiza en tiempo real */
+export function subscribeAllReservationsWithCache(
+  onUpdate: (reservations: Reservation[]) => void
+): Unsubscribe {
+  getCachedAllReservations().then((cached) => {
+    if (cached && cached.length >= 0) {
+      onUpdate(cached);
+    }
+  });
+
+  return onSnapshot(allReservationsQuery(), (snap) => {
+    const list = snap.docs.map((d) =>
+      mapDocToReservation(d.id, d.data() as Record<string, unknown>)
+    );
+    sortReservations(list);
+    setCachedAllReservations(list).catch(() => {});
     onUpdate(list);
   });
 }
@@ -103,6 +140,27 @@ export function subscribeReservationsByDateAndCourt(
     const list = snap.docs.map((d) =>
       mapDocToReservation(d.id, d.data() as Record<string, unknown>)
     );
+    onUpdate(list);
+  });
+}
+
+/** Suscripción por fecha/cancha con caché: muestra primero datos en caché y luego actualiza en tiempo real */
+export function subscribeReservationsByDateAndCourtWithCache(
+  date: string,
+  courtId: CourtId,
+  onUpdate: (reservations: Reservation[]) => void
+): Unsubscribe {
+  getCachedOccupied(date, courtId).then((cached) => {
+    if (cached && cached.length >= 0) {
+      onUpdate(cached);
+    }
+  });
+
+  return onSnapshot(reservationsByDateAndCourtQuery(date, courtId), (snap) => {
+    const list = snap.docs.map((d) =>
+      mapDocToReservation(d.id, d.data() as Record<string, unknown>)
+    );
+    setCachedOccupied(date, courtId, list).catch(() => {});
     onUpdate(list);
   });
 }

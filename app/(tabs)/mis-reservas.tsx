@@ -10,9 +10,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { CourtManagerColors } from '@/constants/theme';
-import { useAuth } from '@/contexts/auth-context';
 import {
-  subscribeReservationsByUser,
+  subscribeAllReservationsWithCache,
   deleteReservation,
 } from '@/lib/reservations';
 import { formatDateForDisplay, formatTimeRange, getTodayISO } from '@/lib/time-utils';
@@ -21,16 +20,14 @@ import type { Reservation } from '@/types/reservation';
 type FilterTab = 'all' | 'today';
 
 export default function MisReservasScreen() {
-  const { user } = useAuth();
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [filter, setFilter] = useState<FilterTab>('all');
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    if (!user) return;
-    const unsub = subscribeReservationsByUser(user.uid, setReservations);
+    const unsub = subscribeAllReservationsWithCache(setReservations);
     return () => unsub();
-  }, [user]);
+  }, []);
 
   const today = getTodayISO();
   const filtered = useMemo(() => {

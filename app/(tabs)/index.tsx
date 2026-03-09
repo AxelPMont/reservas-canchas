@@ -15,7 +15,7 @@ import { CourtManagerColors } from '@/constants/theme';
 import { useAuth } from '@/contexts/auth-context';
 import {
   createReservation,
-  subscribeReservationsByDateAndCourt,
+  subscribeReservationsByDateAndCourtWithCache,
 } from '@/lib/reservations';
 import {
   DURATION_OPTIONS,
@@ -47,8 +47,7 @@ export default function ReservarScreen() {
   const startHours = useMemo(() => getStartHoursForPicker(), []);
 
   useEffect(() => {
-    if (!user) return;
-    const unsub = subscribeReservationsByDateAndCourt(
+    const unsub = subscribeReservationsByDateAndCourtWithCache(
       selectedDate,
       courtId,
       (list) => {
@@ -63,7 +62,7 @@ export default function ReservarScreen() {
       }
     );
     return () => unsub();
-  }, [user, selectedDate, courtId]);
+  }, [selectedDate, courtId]);
 
   const slotStatus = (slotStart: string) =>
     isSlotOccupied(slotStart, durationMinutes, occupiedReservations);
