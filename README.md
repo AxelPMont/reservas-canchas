@@ -11,6 +11,9 @@ MVP de aplicación móvil (React Native / Expo) para reservas de dos canchas: au
 5. Índice compuesto en Firestore (si Firebase te pide crearlo al usar la app):
    - Colección: `reservations`
    - Campos: `userId` (Ascendente), `date` (Ascendente)
+6. Reglas de Firestore: "Mis Reservas" muestra **todas** las reservas (mismo listado en cualquier dispositivo). Asegura que usuarios autenticados puedan leer toda la colección `reservations`, por ejemplo:
+   - En modo prueba: `allow read, write: if request.auth != null;`
+   - O para producción: `allow read: if request.auth != null; allow create: if request.auth != null; allow delete: if request.auth != null;`
 
 ## Get started
 

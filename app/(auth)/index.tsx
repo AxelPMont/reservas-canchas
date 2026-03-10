@@ -6,9 +6,9 @@ import {
   TouchableOpacity,
   StyleSheet,
   KeyboardAvoidingView,
+  ScrollView,
   Platform,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { CourtManagerColors } from '@/constants/theme';
@@ -66,9 +66,15 @@ export default function AuthScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
     >
-      <View style={styles.header}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.header}>
         <View style={styles.logoBox}>
           <Ionicons name="shield-checkmark" size={40} color="#fff" />
         </View>
@@ -212,6 +218,7 @@ export default function AuthScreen() {
           </>
         )}
       </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -220,8 +227,13 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: CourtManagerColors.background,
-    justifyContent: 'center',
     paddingHorizontal: 24,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingVertical: 40,
+    paddingBottom: 120,
   },
   header: {
     alignItems: 'center',
