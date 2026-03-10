@@ -15,14 +15,12 @@ import { CourtManagerColors } from '@/constants/theme';
 import { useAuth } from '@/contexts/auth-context';
 
 export default function AuthScreen() {
-  const [tab, setTab] = useState<'login' | 'register'>('login');
   const [usuario, setUsuario] = useState('');
   const [password, setPassword] = useState('');
-  const [nombreCompleto, setNombreCompleto] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const { signIn, signUp } = useAuth();
+  const { signIn } = useAuth();
 
   const handleLogin = async () => {
     setError('');
@@ -35,28 +33,6 @@ export default function AuthScreen() {
       await signIn(usuario.trim(), password);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Error al iniciar sesión';
-      setError(msg);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleRegister = async () => {
-    setError('');
-    if (!nombreCompleto.trim() || !usuario.trim() || !password) {
-      setError('Completa todos los campos');
-      return;
-    }
-    if (password.length < 6) {
-      setError('La contraseña debe tener al menos 6 caracteres');
-      return;
-    }
-    setLoading(true);
-    try {
-      const email = usuario.includes('@') ? usuario.trim() : `${usuario.trim()}@courtmanager.local`;
-      await signUp(email, password, nombreCompleto.trim(), usuario.trim());
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Error al crear la cuenta';
       setError(msg);
     } finally {
       setLoading(false);
@@ -83,140 +59,52 @@ export default function AuthScreen() {
       </View>
 
       <View style={styles.panel}>
-        <View style={styles.tabs}>
-          <TouchableOpacity
-            style={[styles.tab, tab === 'login' && styles.tabActive]}
-            onPress={() => { setTab('login'); setError(''); }}
-          >
-            <Text style={[styles.tabText, tab === 'login' && styles.tabTextActive]}>
-              Iniciar sesión
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, tab === 'register' && styles.tabActive]}
-            onPress={() => { setTab('register'); setError(''); }}
-          >
-            <Text style={[styles.tabText, tab === 'register' && styles.tabTextActive]}>
-              Registrarse
-            </Text>
-          </TouchableOpacity>
-        </View>
-
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        {tab === 'login' ? (
-          <>
-            <View style={styles.inputWrap}>
-              <Ionicons name="person-outline" size={20} color={CourtManagerColors.textMuted} />
-              <TextInput
-                style={styles.input}
-                placeholder="Usuario (email)"
-                placeholderTextColor={CourtManagerColors.textMuted}
-                value={usuario}
-                onChangeText={setUsuario}
-                autoCapitalize="none"
-                keyboardType="email-address"
-              />
-            </View>
-            <View style={styles.inputWrap}>
-              <Ionicons name="lock-closed-outline" size={20} color={CourtManagerColors.textMuted} />
-              <TextInput
-                style={styles.input}
-                placeholder="Contraseña"
-                placeholderTextColor={CourtManagerColors.textMuted}
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
-              />
-              <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                <Ionicons
-                  name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                  size={22}
-                  color={CourtManagerColors.textMuted}
-                />
-              </TouchableOpacity>
-            </View>
-            <TouchableOpacity
-              style={styles.primaryButton}
-              onPress={handleLogin}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <>
-                  <Text style={styles.primaryButtonText}>Entrar</Text>
-                  <Ionicons name="arrow-forward" size={20} color="#fff" />
-                </>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setTab('register')} style={styles.linkWrap}>
-              <Text style={styles.linkText}>¿No tienes cuenta? </Text>
-              <Text style={styles.link}>Regístrate</Text>
-            </TouchableOpacity>
-          </>
-        ) : (
-          <>
-            <View style={styles.inputWrap}>
-              <Ionicons name="person-outline" size={20} color={CourtManagerColors.textMuted} />
-              <TextInput
-                style={styles.input}
-                placeholder="Nombre completo"
-                placeholderTextColor={CourtManagerColors.textMuted}
-                value={nombreCompleto}
-                onChangeText={setNombreCompleto}
-              />
-            </View>
-            <View style={styles.inputWrap}>
-              <Ionicons name="person-outline" size={20} color={CourtManagerColors.textMuted} />
-              <TextInput
-                style={styles.input}
-                placeholder="Usuario (email o nombre de usuario)"
-                placeholderTextColor={CourtManagerColors.textMuted}
-                value={usuario}
-                onChangeText={setUsuario}
-                autoCapitalize="none"
-                keyboardType="email-address"
-              />
-            </View>
-            <View style={styles.inputWrap}>
-              <Ionicons name="lock-closed-outline" size={20} color={CourtManagerColors.textMuted} />
-              <TextInput
-                style={styles.input}
-                placeholder="Contraseña"
-                placeholderTextColor={CourtManagerColors.textMuted}
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
-              />
-              <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                <Ionicons
-                  name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                  size={22}
-                  color={CourtManagerColors.textMuted}
-                />
-              </TouchableOpacity>
-            </View>
-            <TouchableOpacity
-              style={styles.primaryButton}
-              onPress={handleRegister}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <>
-                  <Text style={styles.primaryButtonText}>Crear cuenta</Text>
-                  <Ionicons name="arrow-forward" size={20} color="#fff" />
-                </>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setTab('login')} style={styles.linkWrap}>
-              <Text style={styles.linkText}>¿Ya tienes cuenta? </Text>
-              <Text style={styles.link}>Inicia sesión</Text>
-            </TouchableOpacity>
-          </>
-        )}
+        <View style={styles.inputWrap}>
+          <Ionicons name="person-outline" size={20} color={CourtManagerColors.textMuted} />
+          <TextInput
+            style={styles.input}
+            placeholder="Usuario (email)"
+            placeholderTextColor={CourtManagerColors.textMuted}
+            value={usuario}
+            onChangeText={setUsuario}
+            autoCapitalize="none"
+            keyboardType="email-address"
+          />
+        </View>
+        <View style={styles.inputWrap}>
+          <Ionicons name="lock-closed-outline" size={20} color={CourtManagerColors.textMuted} />
+          <TextInput
+            style={styles.input}
+            placeholder="Contraseña"
+            placeholderTextColor={CourtManagerColors.textMuted}
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry={!showPassword}
+          />
+          <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+            <Ionicons
+              name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+              size={22}
+              color={CourtManagerColors.textMuted}
+            />
+          </TouchableOpacity>
+        </View>
+        <TouchableOpacity
+          style={styles.primaryButton}
+          onPress={handleLogin}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <>
+              <Text style={styles.primaryButtonText}>Entrar</Text>
+              <Ionicons name="arrow-forward" size={20} color="#fff" />
+            </>
+          )}
+        </TouchableOpacity>
       </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -262,27 +150,6 @@ const styles = StyleSheet.create({
     backgroundColor: CourtManagerColors.card,
     borderRadius: 16,
     padding: 20,
-  },
-  tabs: {
-    flexDirection: 'row',
-    marginBottom: 20,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: 'center',
-    borderRadius: 8,
-  },
-  tabActive: {
-    backgroundColor: CourtManagerColors.primary,
-  },
-  tabText: {
-    color: CourtManagerColors.textMuted,
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  tabTextActive: {
-    color: '#fff',
   },
   error: {
     color: CourtManagerColors.danger,
