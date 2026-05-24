@@ -1,4 +1,4 @@
-import { START_HOURS } from '@/types/reservation';
+import { START_HOURS, type Reservation } from '@/types/reservation';
 
 type SlotReservation = { startTime: string; durationMinutes: number; clientName: string };
 
@@ -12,6 +12,7 @@ export function addMinutesToTime(time: string, minutes: number): string {
 
 export function timeToMinutes(time: string): number {
   const [h, m] = time.split(':').map(Number);
+  if (h === 24) return 24 * 60;
   return h * 60 + m;
 }
 
@@ -35,16 +36,18 @@ export function isSlotOccupied(
   return { occupied: false };
 }
 
+/** Formato 12h para chips y etiquetas (24:00 = medianoche = 12:00 AM) */
+export function formatTimeForChip(time: string): string {
+  const [h, m] = time.split(':').map(Number);
+  if (h === 0 || h === 24) return `12:${String(m).padStart(2, '0')} AM`;
+  if (h === 12) return `12:${String(m).padStart(2, '0')} PM`;
+  if (h < 12) return `${h}:${String(m).padStart(2, '0')} AM`;
+  return `${h - 12}:${String(m).padStart(2, '0')} PM`;
+}
+
 export function formatTimeRange(start: string, durationMinutes: number): string {
   const end = addMinutesToTime(start, durationMinutes);
-  const fmt = (t: string) => {
-    const [h, m] = t.split(':').map(Number);
-    if (h === 0) return '12:00 AM';
-    if (h === 12) return '12:00 PM';
-    if (h < 12) return `${h}:${String(m).padStart(2, '0')} AM`;
-    return `${h - 12}:${String(m).padStart(2, '0')} PM`;
-  };
-  return `${fmt(start)} - ${fmt(end)}`;
+  return `${formatTimeForChip(start)} - ${formatTimeForChip(end)}`;
 }
 
 export function getStartHoursForPicker(): string[] {
@@ -95,4 +98,27 @@ export function getNextDays(count: number): { label: string; date: string }[] {
     out.push({ label: `${dayLabel} ${num}`, date: dateStr });
   }
   return out;
+}
+
+/** Rango de fechas para filtros (pasado + futuro) */
+export function getDateRange(pastDays: number, futureDays: number): { label: string; date: string }[] {
+  const out: { label: string; date: string }[] = [];
+  const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+  for (let i = -pastDays; i <= futureDays; i++) {
+    const d = new Date();
+    d.setDate(d.getDate() + i);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const dateStr = `${y}-${m}-${day}`;
+    out.push({ label: `${days[d.getDay()]} ${d.getDate()}`, date: dateStr });
+  }
+  return out;
+}
+
+export function sortReservationsDesc(list: Reservation[]): Reservation[] {
+  return [...list].sort((a, b) => {
+    if (a.date !== b.date) return b.date.localeCompare(a.date);
+    return b.startTime.localeCompare(a.startTime);
+  });
 }

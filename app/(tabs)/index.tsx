@@ -30,6 +30,7 @@ import {
   formatTimeRange,
   isSlotOccupied,
   getStartHoursForPicker,
+  formatTimeForChip,
 } from '@/lib/time-utils';
 
 export default function ReservarScreen() {
@@ -299,14 +300,6 @@ export default function ReservarScreen() {
       </Modal>
     </View>
   );
-}
-
-function formatTimeForChip(time: string): string {
-  const [h, m] = time.split(':').map(Number);
-  if (h === 0) return '12:00 AM';
-  if (h === 12) return '12:00 PM';
-  if (h < 12) return `${h}:${String(m).padStart(2, '0')} AM`;
-  return `${h - 12}:${String(m).padStart(2, '0')} PM`;
 }
 
 const styles = StyleSheet.create({
