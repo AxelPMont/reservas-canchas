@@ -82,31 +82,14 @@ export function getTodayISO(): string {
   return `${y}-${m}-${day}`;
 }
 
-/** Próximos días en zona local; date es siempre YYYY-MM-DD local */
+/** Próximos días en zona local; ancla en getTodayISO() para evitar desfase UTC */
 export function getNextDays(count: number): { label: string; date: string }[] {
   const out: { label: string; date: string }[] = [];
   const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+  const today = getTodayISO();
+  const [ty, tm, td] = today.split('-').map(Number);
   for (let i = 0; i < count; i++) {
-    const d = new Date();
-    d.setDate(d.getDate() + i);
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    const dateStr = `${y}-${m}-${day}`;
-    const dayLabel = days[d.getDay()];
-    const num = d.getDate();
-    out.push({ label: `${dayLabel} ${num}`, date: dateStr });
-  }
-  return out;
-}
-
-/** Rango de fechas para filtros (pasado + futuro) */
-export function getDateRange(pastDays: number, futureDays: number): { label: string; date: string }[] {
-  const out: { label: string; date: string }[] = [];
-  const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-  for (let i = -pastDays; i <= futureDays; i++) {
-    const d = new Date();
-    d.setDate(d.getDate() + i);
+    const d = new Date(ty, tm - 1, td + i);
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
@@ -114,6 +97,38 @@ export function getDateRange(pastDays: number, futureDays: number): { label: str
     out.push({ label: `${days[d.getDay()]} ${d.getDate()}`, date: dateStr });
   }
   return out;
+}
+
+/** Rango de fechas para filtros (pasado + futuro); ancla en getTodayISO() para evitar desfase UTC */
+export function getDateRange(pastDays: number, futureDays: number): { label: string; date: string }[] {
+  const out: { label: string; date: string }[] = [];
+  const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+  const today = getTodayISO();
+  const [ty, tm, td] = today.split('-').map(Number);
+  for (let i = -pastDays; i <= futureDays; i++) {
+    const d = new Date(ty, tm - 1, td + i);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const dateStr = `${y}-${m}-${day}`;
+    out.push({ label: `${days[d.getDay()]} ${d.getDate()}`, date: dateStr });
+  }
+  return out;
+}
+
+/** Convierte DD/MM/AAAA a YYYY-MM-DD; retorna null si la fecha es inválida */
+export function parseDDMMYYYY(input: string): string | null {
+  const parts = input.split('/');
+  if (parts.length !== 3 || parts[2].length < 4) return null;
+  const [d, m, y] = parts.map(Number);
+  if (isNaN(d) || isNaN(m) || isNaN(y)) return null;
+  const date = new Date(y, m - 1, d);
+  if (
+    date.getFullYear() !== y ||
+    date.getMonth() !== m - 1 ||
+    date.getDate() !== d
+  ) return null;
+  return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 }
 
 export function sortReservationsDesc(list: Reservation[]): Reservation[] {

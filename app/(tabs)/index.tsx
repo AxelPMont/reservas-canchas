@@ -31,6 +31,7 @@ import {
   isSlotOccupied,
   getStartHoursForPicker,
   formatTimeForChip,
+  parseDDMMYYYY,
 } from '@/lib/time-utils';
 
 export default function ReservarScreen() {
@@ -43,6 +44,8 @@ export default function ReservarScreen() {
   const [occupiedReservations, setOccupiedReservations] = useState<Array<{ id: string; startTime: string; durationMinutes: number; clientName: string }>>([]);
   const [creating, setCreating] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [showCustomDateModal, setShowCustomDateModal] = useState(false);
+  const [customDateInput, setCustomDateInput] = useState('');
 
   const dates = useMemo(() => getNextDays(14), []);
   const startHours = useMemo(() => getStartHoursForPicker(), []);
@@ -103,6 +106,28 @@ export default function ReservarScreen() {
 
   const durationLabel = DURATION_OPTIONS.find((d) => d.minutes === durationMinutes)?.label ?? '';
 
+  const isCustomDate = !dates.some((d) => d.date === selectedDate);
+
+  const handleCustomDateInput = (text: string) => {
+    const digits = text.replace(/\D/g, '').slice(0, 8);
+    let formatted = digits;
+    if (digits.length > 2) formatted = `${digits.slice(0, 2)}/${digits.slice(2)}`;
+    if (digits.length > 4) formatted = `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+    setCustomDateInput(formatted);
+  };
+
+  const applyCustomDate = () => {
+    const iso = parseDDMMYYYY(customDateInput);
+    if (!iso) {
+      Alert.alert('Fecha inválida', 'Ingresa una fecha válida en formato DD/MM/AAAA');
+      return;
+    }
+    setSelectedDate(iso);
+    setStartTime(null);
+    setShowCustomDateModal(false);
+    setCustomDateInput('');
+  };
+
   return (
     <View style={styles.container}>
       <ScrollView
@@ -125,15 +150,39 @@ export default function ReservarScreen() {
             <TouchableOpacity
               key={d.date}
               style={[styles.dateChip, selectedDate === d.date && styles.dateChipSelected]}
-              onPress={() => setSelectedDate(d.date)}
+              onPress={() => { setSelectedDate(d.date); setStartTime(null); }}
             >
               <Text style={[styles.dateChipText, selectedDate === d.date && styles.dateChipTextSelected]}>
                 {d.label}
               </Text>
-              {selectedDate === d.date && <View style={styles.dateChipDot} />}
+              {selectedDate === d.date && !isCustomDate && <View style={styles.dateChipDot} />}
             </TouchableOpacity>
           ))}
         </ScrollView>
+
+        <View style={styles.customDateRow}>
+          {isCustomDate && (
+            <View style={styles.customDateBadge}>
+              <Ionicons name="calendar" size={14} color={CourtManagerColors.primary} />
+              <Text style={styles.customDateBadgeText}>{formatDateForDisplay(selectedDate)}</Text>
+              <TouchableOpacity
+                onPress={() => { setSelectedDate(getTodayISO()); setStartTime(null); }}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="close-circle" size={16} color={CourtManagerColors.textMuted} />
+              </TouchableOpacity>
+            </View>
+          )}
+          <TouchableOpacity
+            style={styles.customDateBtn}
+            onPress={() => setShowCustomDateModal(true)}
+          >
+            <Ionicons name="calendar-outline" size={15} color={CourtManagerColors.primary} />
+            <Text style={styles.customDateBtnText}>
+              {isCustomDate ? 'Cambiar fecha' : 'Otra fecha'}
+            </Text>
+          </TouchableOpacity>
+        </View>
 
         {/* Cancha */}
         <View style={styles.section}>
@@ -262,7 +311,7 @@ export default function ReservarScreen() {
         )}
 
         <TouchableOpacity
-          style={[styles.confirmButton, canConfirm && styles.confirmButtonActive]}
+          style={[styles.confirmButton, canConfirm ? styles.confirmButtonActive : null]}
           onPress={handleConfirm}
           disabled={!canConfirm || creating}
         >
@@ -278,7 +327,7 @@ export default function ReservarScreen() {
               <Text
                 style={[
                   styles.confirmButtonText,
-                  canConfirm && styles.confirmButtonTextActive,
+                  canConfirm ? styles.confirmButtonTextActive : null,
                 ]}
               >
                 Confirmar Reserva
@@ -297,6 +346,45 @@ export default function ReservarScreen() {
             <Text style={styles.successTitle}>¡Reserva creada!</Text>
           </View>
         </View>
+      </Modal>
+
+      <Modal visible={showCustomDateModal} transparent animationType="fade">
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => { setShowCustomDateModal(false); setCustomDateInput(''); }}
+        >
+          <TouchableOpacity activeOpacity={1} style={styles.customDateModal}>
+            <Text style={styles.customDateModalTitle}>Fecha personalizada</Text>
+            <Text style={styles.customDateModalSubtitle}>Ingresa la fecha en formato DD/MM/AAAA</Text>
+            <TextInput
+              style={styles.customDateInput}
+              placeholder="DD/MM/AAAA"
+              placeholderTextColor={CourtManagerColors.textMuted}
+              keyboardType="numeric"
+              value={customDateInput}
+              onChangeText={handleCustomDateInput}
+              maxLength={10}
+              autoFocus
+            />
+            <View style={styles.customDateModalBtns}>
+              <TouchableOpacity
+                style={styles.customDateCancelBtn}
+                onPress={() => { setShowCustomDateModal(false); setCustomDateInput(''); }}
+              >
+                <Text style={styles.customDateCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.customDateConfirmBtn, customDateInput.length === 10 && styles.customDateConfirmBtnActive]}
+                onPress={applyCustomDate}
+              >
+                <Text style={[styles.customDateConfirmText, customDateInput.length === 10 && styles.customDateConfirmTextActive]}>
+                  Confirmar
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
     </View>
   );
@@ -442,4 +530,81 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   successTitle: { fontSize: 22, fontWeight: '700', color: '#fff' },
+  customDateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
+    marginTop: -12,
+    marginBottom: 20,
+  },
+  customDateBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: CourtManagerColors.card,
+    borderRadius: 8,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: CourtManagerColors.primary,
+  },
+  customDateBadgeText: { color: CourtManagerColors.primary, fontSize: 13, fontWeight: '600' },
+  customDateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+  },
+  customDateBtnText: { color: CourtManagerColors.primary, fontSize: 13, fontWeight: '600' },
+  customDateModal: {
+    backgroundColor: CourtManagerColors.surface,
+    borderRadius: 20,
+    padding: 24,
+    width: '85%',
+    gap: 14,
+  },
+  customDateModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: CourtManagerColors.text,
+    textAlign: 'center',
+  },
+  customDateModalSubtitle: {
+    fontSize: 13,
+    color: CourtManagerColors.textMuted,
+    textAlign: 'center',
+    marginTop: -6,
+  },
+  customDateInput: {
+    backgroundColor: CourtManagerColors.card,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    color: CourtManagerColors.text,
+    fontSize: 22,
+    textAlign: 'center',
+    letterSpacing: 3,
+    fontWeight: '600',
+  },
+  customDateModalBtns: { flexDirection: 'row', gap: 12, marginTop: 4 },
+  customDateCancelBtn: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 12,
+    backgroundColor: CourtManagerColors.card,
+    alignItems: 'center',
+  },
+  customDateCancelText: { color: CourtManagerColors.textMuted, fontWeight: '600', fontSize: 15 },
+  customDateConfirmBtn: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 12,
+    backgroundColor: CourtManagerColors.card,
+    alignItems: 'center',
+  },
+  customDateConfirmBtnActive: { backgroundColor: CourtManagerColors.primary },
+  customDateConfirmText: { color: CourtManagerColors.textMuted, fontWeight: '700', fontSize: 15 },
+  customDateConfirmTextActive: { color: '#fff' },
 });

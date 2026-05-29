@@ -24,6 +24,7 @@ import {
 } from '@/lib/time-utils';
 import type { Reservation } from '@/types/reservation';
 
+const LIST_INITIAL_LIMIT = 50;
 type FilterTab = 'all' | 'today';
 
 export default function MisReservasScreen() {
@@ -32,8 +33,9 @@ export default function MisReservasScreen() {
   const [filterDate, setFilterDate] = useState<string | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [showAll, setShowAll] = useState(false);
 
-  const dateOptions = useMemo(() => getDateRange(60, 60), []);
+  const dateOptions = useMemo(() => getDateRange(3, 5), []);
 
   useEffect(() => {
     const unsub = subscribeAllReservationsWithCache(setReservations);
@@ -55,6 +57,13 @@ export default function MisReservasScreen() {
   }, [reservations, filter, filterDate, today]);
 
   const countToday = reservations.filter((r) => r.date === today).length;
+
+  const displayedReservations = showAll ? filtered : filtered.slice(0, LIST_INITIAL_LIMIT);
+  const hasMore = !showAll && filtered.length > LIST_INITIAL_LIMIT;
+
+  useEffect(() => {
+    setShowAll(false);
+  }, [filter, filterDate]);
 
   const onDelete = (r: Reservation) => {
     Alert.alert(
@@ -197,7 +206,7 @@ export default function MisReservasScreen() {
       )}
 
       <FlatList
-        data={filtered}
+        data={displayedReservations}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         contentContainerStyle={styles.listContent}
@@ -211,6 +220,16 @@ export default function MisReservasScreen() {
                   : 'No hay reservas'}
             </Text>
           </View>
+        }
+        ListFooterComponent={
+          hasMore ? (
+            <TouchableOpacity style={styles.showAllBtn} onPress={() => setShowAll(true)}>
+              <Ionicons name="list-outline" size={18} color={CourtManagerColors.primary} />
+              <Text style={styles.showAllText}>
+                Ver todas las reservas ({filtered.length})
+              </Text>
+            </TouchableOpacity>
+          ) : null
         }
         refreshControl={
           <RefreshControl
@@ -293,4 +312,16 @@ const styles = StyleSheet.create({
   deleteBtn: { padding: 14, justifyContent: 'center' },
   empty: { paddingVertical: 40, alignItems: 'center' },
   emptyText: { color: CourtManagerColors.textMuted, fontSize: 15 },
+  showAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 16,
+    marginTop: 4,
+    marginBottom: 8,
+    backgroundColor: CourtManagerColors.card,
+    borderRadius: 12,
+  },
+  showAllText: { color: CourtManagerColors.primary, fontSize: 14, fontWeight: '600' },
 });
