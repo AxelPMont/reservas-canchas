@@ -2,12 +2,13 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { Button, Card, CourtBadge, EmptyState, formatMoney } from '@/components/ui';
 import { Colors, Fonts } from '@/constants/theme';
 import { useAuth } from '@/contexts/auth-context';
+import { showAlert } from '@/lib/alert';
 import { friendlyError } from '@/lib/errors';
 import { callPhone, formatPhone, openWhatsApp } from '@/lib/phone';
 import { deleteReservation, subscribeReservation } from '@/lib/reservations';
@@ -81,7 +82,7 @@ export default function DetalleReservaScreen() {
       router.back();
     } catch (e) {
       setAskDelete(false);
-      Alert.alert('No se pudo eliminar', friendlyError(e));
+      showAlert('No se pudo eliminar', friendlyError(e));
     } finally {
       setDeleting(false);
     }
@@ -126,7 +127,7 @@ export default function DetalleReservaScreen() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Enviar confirmación por WhatsApp"
-                onPress={() => openWhatsApp(r.phone!, whatsappMessage).catch(() => Alert.alert('No se pudo abrir WhatsApp'))}
+                onPress={() => openWhatsApp(r.phone!, whatsappMessage).catch(() => showAlert('No se pudo abrir WhatsApp'))}
                 style={styles.whatsapp}
               >
                 <Ionicons name="logo-whatsapp" size={18} color={Colors.depositText} />

@@ -1,10 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, SectionList, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, SectionList, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Chip, CourtBadge, DepositBadge, EmptyState, Field } from '@/components/ui';
 import { Colors, Fonts } from '@/constants/theme';
+import { showAlert } from '@/lib/alert';
 import { friendlyError } from '@/lib/errors';
 import { digitsOnly } from '@/lib/phone';
 import { getReservationsBefore, normalizeClientName, subscribeFrom } from '@/lib/reservations';
@@ -87,7 +88,7 @@ export default function ReservasScreen() {
       setOlder((prev) => sortReservationsDesc([...prev, ...fresh]));
       if (page.length === 0) setNoMoreOlder(true);
     } catch (e) {
-      Alert.alert('Error', friendlyError(e, 'No se pudieron cargar las reservas anteriores.'));
+      showAlert('Error', friendlyError(e, 'No se pudieron cargar las reservas anteriores.'));
     } finally {
       setLoadingOlder(false);
     }

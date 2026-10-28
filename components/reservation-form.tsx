@@ -3,7 +3,6 @@ import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -16,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, Card, Field, SectionTitle, Toggle, formatMoney } from '@/components/ui';
 import { Colors, CourtColors, Fonts, Radius } from '@/constants/theme';
 import { useAuth } from '@/contexts/auth-context';
+import { showAlert } from '@/lib/alert';
 import { pickContactPhone } from '@/lib/contacts';
 import { pickDate } from '@/lib/date-picker';
 import { friendlyError } from '@/lib/errors';
@@ -141,7 +141,7 @@ export function ReservationFormScreen({ mode, initial, editing }: Props) {
       setPhone(picked.phone);
       if (!clientName.trim() && picked.name) setClientName(picked.name);
     } catch {
-      Alert.alert('No se pudo abrir los contactos');
+      showAlert('No se pudo abrir los contactos');
     }
   };
 
@@ -171,7 +171,7 @@ export function ReservationFormScreen({ mode, initial, editing }: Props) {
       router.back();
     } catch (e) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
-      Alert.alert('No se pudo guardar', friendlyError(e, 'No se pudo guardar la reserva.'));
+      showAlert('No se pudo guardar', friendlyError(e, 'No se pudo guardar la reserva.'));
     } finally {
       setSaving(false);
     }
@@ -330,6 +330,8 @@ export function ReservationFormScreen({ mode, initial, editing }: Props) {
             onBlur={() => setFocus(null)}
             maxLength={20}
             right={
+              // En la web no hay acceso a los contactos del celular.
+              Platform.OS !== 'web' && (
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Importar teléfono desde contactos"
@@ -340,6 +342,7 @@ export function ReservationFormScreen({ mode, initial, editing }: Props) {
                 <Ionicons name="person-add-outline" size={18} color={Colors.primary} />
                 <Text style={styles.contactBtnText}>Contactos</Text>
               </Pressable>
+              )
             }
           />
         </View>
