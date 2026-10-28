@@ -1,610 +1,373 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  TextInput,
-  Alert,
-  Modal,
-  ActivityIndicator,
-} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { CourtManagerColors } from '@/constants/theme';
-import { useAuth } from '@/contexts/auth-context';
+import * as Haptics from 'expo-haptics';
+import { useRouter } from 'expo-router';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  createReservation,
-  subscribeReservationsByDateAndCourtWithCache,
-} from '@/lib/reservations';
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  type GestureResponderEvent,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Colors, CourtColors, Fonts, Radius } from '@/constants/theme';
+import { pickDate } from '@/lib/date-picker';
+import { subscribeDay } from '@/lib/reservations';
 import {
-  DURATION_OPTIONS,
-  START_HOURS,
-  type CourtId,
-  type ReservationForm,
-} from '@/types/reservation';
-import {
-  getTodayISO,
-  getNextDays,
-  formatDateForDisplay,
-  formatTimeRange,
-  isSlotOccupied,
-  getStartHoursForPicker,
+  addDaysISO,
+  dayOfMonth,
+  dayOfWeekShort,
+  formatDateLong,
   formatTimeForChip,
-  parseDDMMYYYY,
+  formatTimeRange,
+  getTodayISO,
+  getDaysFrom,
+  minutesNowInDay,
+  minutesToTime,
+  reservationRange,
 } from '@/lib/time-utils';
+import {
+  CLOSING_MINUTES,
+  COURTS,
+  OPENING_MINUTES,
+  type CourtId,
+  type Reservation,
+} from '@/types/reservation';
 
-export default function ReservarScreen() {
-  const { user } = useAuth();
-  const [selectedDate, setSelectedDate] = useState(getTodayISO());
-  const [courtId, setCourtId] = useState<CourtId>('1');
-  const [durationMinutes, setDurationMinutes] = useState(60);
-  const [startTime, setStartTime] = useState<string | null>(null);
-  const [clientName, setClientName] = useState('');
-  const [occupiedReservations, setOccupiedReservations] = useState<Array<{ id: string; startTime: string; durationMinutes: number; clientName: string }>>([]);
-  const [creating, setCreating] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
-  const [showCustomDateModal, setShowCustomDateModal] = useState(false);
-  const [customDateInput, setCustomDateInput] = useState('');
+const logo = require('@/assets/images/icon.png');
 
-  const dates = useMemo(() => getNextDays(14), []);
-  const startHours = useMemo(() => getStartHoursForPicker(), []);
+/** Alto de una hora en la línea de tiempo. */
+const HOUR_H = 64;
+const TIME_COL = 52;
+const STRIP_DAYS = 21;
+
+const yFor = (minutes: number) => ((minutes - OPENING_MINUTES) / 60) * HOUR_H;
+const hoursUntil = (end: number) =>
+  Array.from({ length: Math.ceil((end - OPENING_MINUTES) / 60) + 1 }, (_, i) => OPENING_MINUTES + i * 60);
+
+export default function AgendaScreen() {
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const scrollRef = useRef<ScrollView>(null);
+  const today = getTodayISO();
+  const [date, setDate] = useState(today);
+  const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [now, setNow] = useState(new Date());
 
   useEffect(() => {
-    const unsub = subscribeReservationsByDateAndCourtWithCache(
-      selectedDate,
-      courtId,
-      (list) => {
-        setOccupiedReservations(
-          list.map((r) => ({
-            id: r.id,
-            startTime: r.startTime,
-            durationMinutes: r.durationMinutes,
-            clientName: r.clientName,
-          }))
-        );
-      }
-    );
-    return () => unsub();
-  }, [selectedDate, courtId]);
+    const t = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(t);
+  }, []);
 
-  const slotStatus = (slotStart: string) =>
-    isSlotOccupied(slotStart, durationMinutes, occupiedReservations);
+  useEffect(() => {
+    setReservations([]);
+    return subscribeDay(date, setReservations);
+  }, [date]);
 
-  const isComplete =
-    selectedDate &&
-    courtId &&
-    durationMinutes &&
-    startTime &&
-    clientName.trim().length > 0;
+  const nowMinutes = minutesNowInDay(date, now);
 
-  const selectedSlotStatus = startTime ? slotStatus(startTime) : null;
-  const canConfirm = isComplete && selectedSlotStatus && !selectedSlotStatus.occupied;
+  // Al cambiar de día, centra la vista en la hora actual (o en la tarde si es otro día).
+  useEffect(() => {
+    const focus = nowMinutes ?? 16 * 60;
+    const y = Math.max(0, yFor(focus) - HOUR_H * 1.5);
+    const t = setTimeout(() => scrollRef.current?.scrollTo({ y, animated: false }), 50);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date]);
 
-  const handleConfirm = async () => {
-    if (!user || !canConfirm) return;
-    setCreating(true);
-    try {
-      const data: ReservationForm = {
-        date: selectedDate,
-        courtId,
-        startTime: startTime!,
-        durationMinutes,
-        clientName: clientName.trim(),
-      };
-      await createReservation(user.uid, data);
-      setShowSuccess(true);
-      setClientName('');
-      setStartTime(null);
-      setTimeout(() => setShowSuccess(false), 2000);
-    } catch (e) {
-      Alert.alert('Error', e instanceof Error ? e.message : 'No se pudo crear la reserva');
-    } finally {
-      setCreating(false);
-    }
+  const stripStart = useMemo(() => {
+    const anchor = addDaysISO(today, -1);
+    const end = addDaysISO(anchor, STRIP_DAYS - 1);
+    return date < anchor || date > end ? addDaysISO(date, -3) : anchor;
+  }, [date, today]);
+  const days = useMemo(() => getDaysFrom(stripStart, STRIP_DAYS), [stripStart]);
+
+  const byCourt = useMemo(() => {
+    const map: Record<CourtId, Reservation[]> = { '1': [], '2': [] };
+    reservations.forEach((r) => map[r.courtId]?.push(r));
+    return map;
+  }, [reservations]);
+
+  const withDeposit = reservations.filter((r) => (r.deposit?.amount ?? 0) > 0).length;
+  const bookedMinutes = reservations.reduce((acc, r) => acc + r.durationMinutes, 0);
+  const freeHours = Math.max(0, ((CLOSING_MINUTES - OPENING_MINUTES) * 2 - bookedMinutes) / 60);
+  // Reservas antiguas pueden terminar después de medianoche: la línea de tiempo se alarga para mostrarlas.
+  const dayEnd = Math.max(CLOSING_MINUTES, ...reservations.map((r) => reservationRange(r)[1]));
+  const hours = useMemo(() => hoursUntil(dayEnd), [dayEnd]);
+
+  const openNew = (courtId?: CourtId, time?: string) => {
+    Haptics.selectionAsync().catch(() => {});
+    router.push({ pathname: '/reserva/nueva', params: { date, ...(courtId ? { courtId } : {}), ...(time ? { time } : {}) } });
   };
 
-  const durationLabel = DURATION_OPTIONS.find((d) => d.minutes === durationMinutes)?.label ?? '';
-
-  const isCustomDate = !dates.some((d) => d.date === selectedDate);
-
-  const handleCustomDateInput = (text: string) => {
-    const digits = text.replace(/\D/g, '').slice(0, 8);
-    let formatted = digits;
-    if (digits.length > 2) formatted = `${digits.slice(0, 2)}/${digits.slice(2)}`;
-    if (digits.length > 4) formatted = `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
-    setCustomDateInput(formatted);
-  };
-
-  const applyCustomDate = () => {
-    const iso = parseDDMMYYYY(customDateInput);
-    if (!iso) {
-      Alert.alert('Fecha inválida', 'Ingresa una fecha válida en formato DD/MM/AAAA');
-      return;
-    }
-    setSelectedDate(iso);
-    setStartTime(null);
-    setShowCustomDateModal(false);
-    setCustomDateInput('');
+  const onColumnPress = (courtId: CourtId) => (e: GestureResponderEvent) => {
+    const minutes = OPENING_MINUTES + Math.floor((e.nativeEvent.locationY / HOUR_H) * 2) * 30;
+    if (minutes >= CLOSING_MINUTES) return;
+    openNew(courtId, minutesToTime(minutes));
   };
 
   return (
-    <View style={styles.container}>
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Fecha */}
-        <View style={styles.section}>
-          <Ionicons name="calendar-outline" size={20} color={CourtManagerColors.primary} />
-          <Text style={styles.sectionLabel}>Fecha</Text>
+    <View style={[styles.container, { paddingTop: insets.top + 6 }]}>
+      <View style={styles.header}>
+        <Image source={logo} style={styles.logo} accessibilityIgnoresInvertColors />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.title}>Agenda</Text>
+          <Text style={styles.subtitle}>{formatDateLong(date)}</Text>
         </View>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.dateStrip}
-          contentContainerStyle={styles.dateStripContent}
-        >
-          {dates.map((d) => (
-            <TouchableOpacity
-              key={d.date}
-              style={[styles.dateChip, selectedDate === d.date && styles.dateChipSelected]}
-              onPress={() => { setSelectedDate(d.date); setStartTime(null); }}
-            >
-              <Text style={[styles.dateChipText, selectedDate === d.date && styles.dateChipTextSelected]}>
-                {d.label}
-              </Text>
-              {selectedDate === d.date && !isCustomDate && <View style={styles.dateChipDot} />}
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        <View style={styles.customDateRow}>
-          {isCustomDate && (
-            <View style={styles.customDateBadge}>
-              <Ionicons name="calendar" size={14} color={CourtManagerColors.primary} />
-              <Text style={styles.customDateBadgeText}>{formatDateForDisplay(selectedDate)}</Text>
-              <TouchableOpacity
-                onPress={() => { setSelectedDate(getTodayISO()); setStartTime(null); }}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Ionicons name="close-circle" size={16} color={CourtManagerColors.textMuted} />
-              </TouchableOpacity>
-            </View>
-          )}
-          <TouchableOpacity
-            style={styles.customDateBtn}
-            onPress={() => setShowCustomDateModal(true)}
-          >
-            <Ionicons name="calendar-outline" size={15} color={CourtManagerColors.primary} />
-            <Text style={styles.customDateBtnText}>
-              {isCustomDate ? 'Cambiar fecha' : 'Otra fecha'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Cancha */}
-        <View style={styles.section}>
-          <Ionicons name="location-outline" size={20} color={CourtManagerColors.primary} />
-          <Text style={styles.sectionLabel}>Cancha</Text>
-        </View>
-        <View style={styles.row}>
-          {(['1', '2'] as CourtId[]).map((id) => (
-            <TouchableOpacity
-              key={id}
-              style={[styles.courtChip, courtId === id && styles.courtChipSelected]}
-              onPress={() => { setCourtId(id); setStartTime(null); }}
-            >
-              <View style={[styles.courtDot, id === '1' && styles.courtDot1, id === '2' && styles.courtDot2]} />
-              <Text style={styles.courtChipText}>Cancha {id}</Text>
-              {courtId === id && (
-                <Ionicons name="checkmark-circle" size={22} color={CourtManagerColors.primary} />
-              )}
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Duración */}
-        <View style={styles.section}>
-          <Ionicons name="time-outline" size={20} color={CourtManagerColors.primary} />
-          <Text style={styles.sectionLabel}>Duración</Text>
-        </View>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.durationStrip}
-          contentContainerStyle={styles.durationStripContent}
-        >
-          {DURATION_OPTIONS.map((opt) => (
-            <TouchableOpacity
-              key={opt.minutes}
-              style={[styles.durationChip, durationMinutes === opt.minutes && styles.durationChipSelected]}
-              onPress={() => setDurationMinutes(opt.minutes)}
-            >
-              <Text style={[styles.durationChipText, durationMinutes === opt.minutes && styles.durationChipTextSelected]}>
-                {opt.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        {/* Hora de inicio */}
-        <View style={styles.section}>
-          <Ionicons name="time-outline" size={20} color={CourtManagerColors.primary} />
-          <Text style={styles.sectionLabel}>Hora de inicio</Text>
-          <View style={styles.occupiedLegend}>
-            <View style={styles.occupiedDot} />
-            <Text style={styles.occupiedLegendText}>Ocupado</Text>
-          </View>
-        </View>
-        <View style={styles.timeGrid}>
-          {startHours.map((t) => {
-            const status = slotStatus(t);
-            const selected = startTime === t;
-            const disabled = status.occupied;
-            return (
-              <TouchableOpacity
-                key={t}
-                style={[
-                  styles.timeChip,
-                  disabled && styles.timeChipOccupied,
-                  selected && !disabled && styles.timeChipSelected,
-                ]}
-                onPress={() => !disabled && setStartTime(t)}
-                disabled={disabled}
-              >
-                <Text
-                  style={[
-                    styles.timeChipText,
-                    disabled && styles.timeChipTextOccupied,
-                    selected && !disabled && styles.timeChipTextSelected,
-                  ]}
-                >
-                  {formatTimeForChip(t)}
-                </Text>
-                {status.occupied && status.clientName && (
-                  <Text style={styles.timeChipSubtext} numberOfLines={1}>{status.clientName}</Text>
-                )}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {/* Nombre del cliente */}
-        <View style={styles.section}>
-          <Ionicons name="person-outline" size={20} color={CourtManagerColors.primary} />
-          <Text style={styles.sectionLabel}>Nombre del cliente</Text>
-        </View>
-        <View style={styles.inputWrap}>
-          <Ionicons name="person-outline" size={20} color={CourtManagerColors.textMuted} />
-          <TextInput
-            style={styles.input}
-            placeholder="Nombre del cliente"
-            placeholderTextColor={CourtManagerColors.textMuted}
-            value={clientName}
-            onChangeText={setClientName}
-          />
-        </View>
-
-        {/* Resumen */}
-        {(selectedDate && courtId && startTime && durationMinutes) && (
-          <View style={styles.summary}>
-            <Text style={styles.summaryTitle}>RESUMEN</Text>
-            <Text style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Fecha: </Text>
-              {formatDateForDisplay(selectedDate)}
-            </Text>
-            <Text style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Cancha: </Text>
-              Cancha {courtId}
-            </Text>
-            <Text style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Horario: </Text>
-              {formatTimeRange(startTime, durationMinutes)}
-            </Text>
-            <Text style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Duración: </Text>
-              {durationLabel}
-            </Text>
-          </View>
+        {date !== today && (
+          <Pressable accessibilityRole="button" onPress={() => setDate(today)} style={styles.todayBtn}>
+            <Text style={styles.todayText}>Hoy</Text>
+          </Pressable>
         )}
-
-        <TouchableOpacity
-          style={[styles.confirmButton, canConfirm ? styles.confirmButtonActive : null]}
-          onPress={handleConfirm}
-          disabled={!canConfirm || creating}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Elegir fecha en el calendario"
+          onPress={() => pickDate(date, setDate)}
+          style={styles.iconBtn}
         >
-          {creating ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <>
-              <Ionicons
-                name="checkmark"
-                size={22}
-                color={canConfirm ? '#fff' : CourtManagerColors.textMuted}
-              />
-              <Text
-                style={[
-                  styles.confirmButtonText,
-                  canConfirm ? styles.confirmButtonTextActive : null,
-                ]}
-              >
-                Confirmar Reserva
+          <Ionicons name="calendar-outline" size={22} color={Colors.textSecondary} />
+        </Pressable>
+      </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.stripScroll}
+        contentContainerStyle={styles.strip}
+      >
+        {days.map((d) => {
+          const selected = d === date;
+          return (
+            <Pressable
+              key={d}
+              accessibilityRole="button"
+              accessibilityState={{ selected }}
+              accessibilityLabel={formatDateLong(d)}
+              onPress={() => setDate(d)}
+              style={[styles.dayChip, selected ? styles.dayChipSelected : styles.dayChipIdle]}
+            >
+              <Text style={[styles.dayDow, { color: selected ? Colors.onPrimary : Colors.textMuted }]}>
+                {dayOfWeekShort(d)}
               </Text>
-            </>
-          )}
-        </TouchableOpacity>
+              <Text style={[styles.dayNum, { color: selected ? Colors.onPrimary : Colors.textSecondary }]}>
+                {dayOfMonth(d)}
+              </Text>
+              {d === today && !selected && <View style={styles.todayDot} />}
+            </Pressable>
+          );
+        })}
       </ScrollView>
 
-      <Modal visible={showSuccess} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.successCircle}>
-              <Ionicons name="checkmark" size={64} color="#fff" />
-            </View>
-            <Text style={styles.successTitle}>¡Reserva creada!</Text>
-          </View>
+      <View style={styles.summary}>
+        <Text style={styles.summaryStrong}>
+          {reservations.length} {reservations.length === 1 ? 'reserva' : 'reservas'}
+        </Text>
+        <Text style={styles.summaryText}>·</Text>
+        <Text style={styles.summaryText}>{withDeposit} con adelanto</Text>
+        <View style={styles.summaryRight}>
+          <View style={[styles.legendDot, { backgroundColor: Colors.deposit }]} />
+          <Text style={styles.summaryText}>{freeHours % 1 === 0 ? freeHours : freeHours.toFixed(1)} h libres</Text>
         </View>
-      </Modal>
+      </View>
 
-      <Modal visible={showCustomDateModal} transparent animationType="fade">
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => { setShowCustomDateModal(false); setCustomDateInput(''); }}
-        >
-          <TouchableOpacity activeOpacity={1} style={styles.customDateModal}>
-            <Text style={styles.customDateModalTitle}>Fecha personalizada</Text>
-            <Text style={styles.customDateModalSubtitle}>Ingresa la fecha en formato DD/MM/AAAA</Text>
-            <TextInput
-              style={styles.customDateInput}
-              placeholder="DD/MM/AAAA"
-              placeholderTextColor={CourtManagerColors.textMuted}
-              keyboardType="numeric"
-              value={customDateInput}
-              onChangeText={handleCustomDateInput}
-              maxLength={10}
-              autoFocus
-            />
-            <View style={styles.customDateModalBtns}>
-              <TouchableOpacity
-                style={styles.customDateCancelBtn}
-                onPress={() => { setShowCustomDateModal(false); setCustomDateInput(''); }}
-              >
-                <Text style={styles.customDateCancelText}>Cancelar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.customDateConfirmBtn, customDateInput.length === 10 && styles.customDateConfirmBtnActive]}
-                onPress={applyCustomDate}
-              >
-                <Text style={[styles.customDateConfirmText, customDateInput.length === 10 && styles.customDateConfirmTextActive]}>
-                  Confirmar
-                </Text>
-              </TouchableOpacity>
+      <View style={styles.courtHeader}>
+        <View style={{ width: TIME_COL }} />
+        {COURTS.map((c) => (
+          <View key={c} style={[styles.courtHead, { backgroundColor: CourtColors[c].fill }]}>
+            <View style={[styles.legendDot, { backgroundColor: CourtColors[c].solid }]} />
+            <Text style={[styles.courtHeadText, { color: CourtColors[c].text }]}>Cancha {c}</Text>
+          </View>
+        ))}
+      </View>
+
+      <ScrollView ref={scrollRef} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 110 }}>
+        <View style={{ height: yFor(dayEnd) + 16, marginTop: 10 }}>
+          {hours.map((m) => (
+            <View key={m} style={[styles.hourRow, { top: yFor(m) }]} pointerEvents="none">
+              <Text style={styles.hourLabel}>{formatTimeForChip(minutesToTime(m)).replace(':00', '')}</Text>
+              <View style={styles.hourLine} />
             </View>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
+          ))}
+
+          <View style={styles.columns}>
+            {COURTS.map((c) => (
+              <Pressable
+                key={c}
+                accessibilityLabel={`Reservar en cancha ${c}`}
+                onPress={onColumnPress(c)}
+                style={styles.column}
+              >
+                {byCourt[c].map((r) => (
+                  <ReservationBlock key={r.id} r={r} onPress={() => router.push(`/reserva/${r.id}`)} />
+                ))}
+              </Pressable>
+            ))}
+          </View>
+
+          {nowMinutes != null && nowMinutes >= OPENING_MINUTES && (
+            <View pointerEvents="none" style={[styles.nowRow, { top: yFor(nowMinutes) - 9 }]}>
+              <View style={styles.nowPill}>
+                <Text style={styles.nowText}>{formatTimeForChip(minutesToTime(nowMinutes)).replace(/ (AM|PM)/, '')}</Text>
+              </View>
+              <View style={styles.nowDot} />
+              <View style={styles.nowLine} />
+            </View>
+          )}
+        </View>
+      </ScrollView>
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Nueva reserva"
+        onPress={() => openNew()}
+        style={({ pressed }) => [styles.fab, pressed && { opacity: 0.9 }]}
+      >
+        <Ionicons name="add" size={24} color={Colors.onPrimary} />
+        <Text style={styles.fabText}>Reservar</Text>
+      </Pressable>
     </View>
   );
 }
 
+function ReservationBlock({ r, onPress }: { r: Reservation; onPress: () => void }) {
+  const [start, end] = reservationRange(r);
+  const c = CourtColors[r.courtId];
+  const height = yFor(end) - yFor(start) - 4;
+  const compact = height < 56;
+  const hasDeposit = (r.deposit?.amount ?? 0) > 0;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${r.clientName}, ${formatTimeRange(r.startTime, r.durationMinutes)}`}
+      onPress={onPress}
+      style={[styles.block, { top: yFor(start) + 2, height, backgroundColor: c.fill, borderColor: c.border }]}
+    >
+      <View style={styles.blockTop}>
+        <Text style={styles.blockName} numberOfLines={1}>
+          {r.clientName}
+        </Text>
+        {hasDeposit && (
+          <View style={styles.depositTag}>
+            <Text style={styles.depositTagText}>S/</Text>
+          </View>
+        )}
+      </View>
+      {!compact || height >= 40 ? (
+        <Text style={[styles.blockTime, { color: c.sub }]} numberOfLines={1}>
+          {formatTimeRange(r.startTime, r.durationMinutes)}
+        </Text>
+      ) : null}
+      {height >= 92 && !hasDeposit ? <Text style={styles.blockNote}>Sin adelanto</Text> : null}
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: CourtManagerColors.background },
-  scroll: { flex: 1 },
-  scrollContent: { padding: 20, paddingBottom: 100 },
-  section: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 10,
-  },
-  sectionLabel: { fontSize: 16, fontWeight: '600', color: CourtManagerColors.text },
-  occupiedLegend: { flexDirection: 'row', alignItems: 'center', marginLeft: 'auto', gap: 6 },
-  occupiedDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: CourtManagerColors.occupied },
-  occupiedLegendText: { fontSize: 12, color: CourtManagerColors.occupied },
-  dateStrip: { marginBottom: 20 },
-  dateStripContent: { gap: 10, paddingVertical: 4 },
-  dateChip: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    backgroundColor: CourtManagerColors.card,
-    minWidth: 72,
-    alignItems: 'center',
-  },
-  dateChipSelected: { backgroundColor: CourtManagerColors.primary },
-  dateChipText: { color: CourtManagerColors.text, fontWeight: '600', fontSize: 14 },
-  dateChipTextSelected: { color: '#fff' },
-  dateChipDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#fff',
-    marginTop: 4,
-    opacity: 0.9,
-  },
-  row: { flexDirection: 'row', gap: 12, marginBottom: 20 },
-  courtChip: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    backgroundColor: CourtManagerColors.card,
-  },
-  courtChipSelected: { backgroundColor: CourtManagerColors.card, borderWidth: 2, borderColor: CourtManagerColors.primary },
-  courtDot: { width: 10, height: 10, borderRadius: 5 },
-  courtDot1: { backgroundColor: CourtManagerColors.primary },
-  courtDot2: { backgroundColor: CourtManagerColors.futureAccent },
-  courtChipText: { color: CourtManagerColors.text, fontWeight: '600', fontSize: 15 },
-  durationStrip: { marginBottom: 20 },
-  durationStripContent: { gap: 10, paddingVertical: 4 },
-  durationChip: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    backgroundColor: CourtManagerColors.card,
-  },
-  durationChipSelected: { backgroundColor: CourtManagerColors.primary },
-  durationChipText: { color: CourtManagerColors.text, fontWeight: '600', fontSize: 14 },
-  durationChipTextSelected: { color: '#fff' },
-  timeGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginBottom: 20,
-  },
-  timeChip: {
-    width: '31%',
-    paddingVertical: 14,
-    borderRadius: 12,
-    backgroundColor: CourtManagerColors.card,
-    alignItems: 'center',
-  },
-  timeChipOccupied: { backgroundColor: CourtManagerColors.dangerBg },
-  timeChipSelected: { backgroundColor: CourtManagerColors.primary },
-  timeChipText: { color: CourtManagerColors.text, fontWeight: '600', fontSize: 13 },
-  timeChipTextOccupied: { color: CourtManagerColors.occupied },
-  timeChipTextSelected: { color: '#fff' },
-  timeChipSubtext: { fontSize: 10, color: CourtManagerColors.textMuted, marginTop: 2 },
-  inputWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: CourtManagerColors.card,
-    borderRadius: 12,
+  container: { flex: 1, backgroundColor: Colors.background },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingBottom: 8 },
+  logo: { width: 40, height: 40, borderRadius: 10 },
+  title: { fontFamily: Fonts.display, fontSize: 24, color: Colors.text, lineHeight: 26 },
+  subtitle: { fontFamily: Fonts.regular, fontSize: 13, color: Colors.textMuted },
+  todayBtn: {
+    height: 36,
     paddingHorizontal: 14,
-    marginBottom: 20,
-    gap: 10,
-  },
-  input: {
-    flex: 1,
-    color: CourtManagerColors.text,
-    fontSize: 16,
-    paddingVertical: 14,
-  },
-  summary: {
-    backgroundColor: CourtManagerColors.card,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
-  },
-  summaryTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: CourtManagerColors.textMuted,
-    letterSpacing: 1,
-    marginBottom: 12,
-  },
-  summaryRow: { fontSize: 14, color: CourtManagerColors.text, marginBottom: 6 },
-  summaryLabel: { color: CourtManagerColors.textMuted },
-  confirmButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 16,
-    borderRadius: 12,
-    backgroundColor: CourtManagerColors.card,
-  },
-  confirmButtonActive: { backgroundColor: CourtManagerColors.primary },
-  confirmButtonText: { fontSize: 16, fontWeight: '700', color: CourtManagerColors.textMuted },
-  confirmButtonTextActive: { color: '#fff' },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: { alignItems: 'center' },
-  successCircle: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: CourtManagerColors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-  },
-  successTitle: { fontSize: 22, fontWeight: '700', color: '#fff' },
-  customDateRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 8,
-    marginTop: -12,
-    marginBottom: 20,
-  },
-  customDateBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: CourtManagerColors.card,
-    borderRadius: 8,
-    paddingVertical: 5,
-    paddingHorizontal: 10,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: CourtManagerColors.primary,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+    justifyContent: 'center',
   },
-  customDateBadgeText: { color: CourtManagerColors.primary, fontSize: 13, fontWeight: '600' },
-  customDateBtn: {
+  todayText: { fontFamily: Fonts.semibold, fontSize: 14, color: Colors.text },
+  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  // Sin flexGrow: 0 la franja horizontal se estira y empuja la agenda hacia abajo.
+  stripScroll: { flexGrow: 0, flexShrink: 0 },
+  strip: { gap: 8, paddingHorizontal: 16, paddingVertical: 6 },
+  dayChip: { width: 48, height: 64, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  dayChipSelected: { backgroundColor: Colors.primary },
+  dayChipIdle: { backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.borderSoft },
+  dayDow: { fontFamily: Fonts.semibold, fontSize: 12 },
+  dayNum: { fontFamily: Fonts.display, fontSize: 20 },
+  todayDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: Colors.primary, marginTop: 2 },
+  summary: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 8 },
+  summaryStrong: { fontFamily: Fonts.semibold, fontSize: 13, color: Colors.text },
+  summaryText: { fontFamily: Fonts.regular, fontSize: 13, color: Colors.textMuted },
+  summaryRight: { marginLeft: 'auto', flexDirection: 'row', alignItems: 'center', gap: 6 },
+  legendDot: { width: 8, height: 8, borderRadius: 4 },
+  courtHeader: {
+    flexDirection: 'row',
+    gap: 6,
+    paddingRight: 12,
+    paddingBottom: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderSoft,
+  },
+  courtHead: {
+    flex: 1,
+    height: 34,
+    borderRadius: 10,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    justifyContent: 'center',
+    gap: 6,
+  },
+  courtHeadText: { fontFamily: Fonts.display, fontSize: 15 },
+  hourRow: { position: 'absolute', left: 0, right: 0, flexDirection: 'row', alignItems: 'flex-start' },
+  hourLabel: {
+    width: TIME_COL,
+    paddingRight: 8,
+    textAlign: 'right',
+    fontFamily: Fonts.medium,
+    fontSize: 11,
+    color: Colors.textMuted,
+    transform: [{ translateY: -8 }],
+  },
+  hourLine: { flex: 1, height: 1, backgroundColor: Colors.borderSoft },
+  columns: { position: 'absolute', top: 0, bottom: 0, left: TIME_COL + 6, right: 12, flexDirection: 'row', gap: 6 },
+  column: { flex: 1, height: '100%' },
+  block: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 8,
     paddingVertical: 5,
-    paddingHorizontal: 10,
+    overflow: 'hidden',
   },
-  customDateBtnText: { color: CourtManagerColors.primary, fontSize: 13, fontWeight: '600' },
-  customDateModal: {
-    backgroundColor: CourtManagerColors.surface,
-    borderRadius: 20,
-    padding: 24,
-    width: '85%',
-    gap: 14,
-  },
-  customDateModalTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: CourtManagerColors.text,
-    textAlign: 'center',
-  },
-  customDateModalSubtitle: {
-    fontSize: 13,
-    color: CourtManagerColors.textMuted,
-    textAlign: 'center',
-    marginTop: -6,
-  },
-  customDateInput: {
-    backgroundColor: CourtManagerColors.card,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    color: CourtManagerColors.text,
-    fontSize: 22,
-    textAlign: 'center',
-    letterSpacing: 3,
-    fontWeight: '600',
-  },
-  customDateModalBtns: { flexDirection: 'row', gap: 12, marginTop: 4 },
-  customDateCancelBtn: {
-    flex: 1,
-    paddingVertical: 13,
-    borderRadius: 12,
-    backgroundColor: CourtManagerColors.card,
+  blockTop: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  blockName: { flex: 1, fontFamily: Fonts.bold, fontSize: 14, color: Colors.text },
+  blockTime: { fontFamily: Fonts.medium, fontSize: 12 },
+  blockNote: { fontFamily: Fonts.regular, fontSize: 12, color: Colors.textMuted, marginTop: 4 },
+  depositTag: { height: 18, paddingHorizontal: 5, borderRadius: 5, backgroundColor: Colors.deposit, justifyContent: 'center' },
+  depositTagText: { fontFamily: Fonts.bold, fontSize: 11, color: Colors.onDeposit },
+  nowRow: { position: 'absolute', left: 0, right: 0, flexDirection: 'row', alignItems: 'center' },
+  nowPill: {
+    width: TIME_COL - 4,
+    marginLeft: 2,
+    height: 18,
+    borderRadius: 5,
+    backgroundColor: Colors.danger,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  customDateCancelText: { color: CourtManagerColors.textMuted, fontWeight: '600', fontSize: 15 },
-  customDateConfirmBtn: {
-    flex: 1,
-    paddingVertical: 13,
-    borderRadius: 12,
-    backgroundColor: CourtManagerColors.card,
+  nowText: { fontFamily: Fonts.bold, fontSize: 11, color: Colors.onDanger },
+  nowDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: Colors.danger, marginLeft: 2 },
+  nowLine: { flex: 1, height: 2, backgroundColor: Colors.danger },
+  fab: {
+    position: 'absolute',
+    right: 16,
+    bottom: 20,
+    height: 56,
+    paddingLeft: 18,
+    paddingRight: 22,
+    borderRadius: Radius.pill,
+    backgroundColor: Colors.primary,
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
+    elevation: 6,
   },
-  customDateConfirmBtnActive: { backgroundColor: CourtManagerColors.primary },
-  customDateConfirmText: { color: CourtManagerColors.textMuted, fontWeight: '700', fontSize: 15 },
-  customDateConfirmTextActive: { color: '#fff' },
+  fabText: { fontFamily: Fonts.display, fontSize: 18, color: Colors.onPrimary },
 });

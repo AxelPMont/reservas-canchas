@@ -1,17 +1,18 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Reservation } from '@/types/reservation';
-import type { CourtId } from '@/types/reservation';
 
-const PREFIX = 'courtmanager_reservations';
-const KEY_ALL = `${PREFIX}_all`;
+/**
+ * Caché local para mostrar datos al instante (y sin conexión) mientras llega la
+ * actualización en tiempo real de Firestore.
+ */
+const PREFIX = 'courtmanager_v2_';
+const LEGACY_PREFIX = 'courtmanager_reservations';
+/** Cuántos días de agenda se guardan en caché. */
+const MAX_DAY_KEYS = 21;
 
-export function cacheKeyForDateCourt(date: string, courtId: CourtId): string {
-  return `${PREFIX}_${date}_${courtId}`;
-}
-
-export async function getCachedAllReservations(): Promise<Reservation[] | null> {
+export async function getCached(key: string): Promise<Reservation[] | null> {
   try {
-    const raw = await AsyncStorage.getItem(KEY_ALL);
+    const raw = await AsyncStorage.getItem(PREFIX + key);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Reservation[];
     return Array.isArray(parsed) ? parsed : null;
@@ -20,37 +21,25 @@ export async function getCachedAllReservations(): Promise<Reservation[] | null> 
   }
 }
 
-export async function setCachedAllReservations(list: Reservation[]): Promise<void> {
+export async function setCached(key: string, list: Reservation[]): Promise<void> {
   try {
-    await AsyncStorage.setItem(KEY_ALL, JSON.stringify(list));
+    await AsyncStorage.setItem(PREFIX + key, JSON.stringify(list));
   } catch {
     // ignore
   }
 }
 
-export async function getCachedOccupied(
-  date: string,
-  courtId: CourtId
-): Promise<Reservation[] | null> {
+/** Borra la caché de la versión anterior y los días más viejos. Se llama al iniciar la app. */
+export async function pruneCache(): Promise<void> {
   try {
-    const key = cacheKeyForDateCourt(date, courtId);
-    const raw = await AsyncStorage.getItem(key);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Reservation[];
-    return Array.isArray(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
-export async function setCachedOccupied(
-  date: string,
-  courtId: CourtId,
-  list: Reservation[]
-): Promise<void> {
-  try {
-    const key = cacheKeyForDateCourt(date, courtId);
-    await AsyncStorage.setItem(key, JSON.stringify(list));
+    const keys = await AsyncStorage.getAllKeys();
+    const legacy = keys.filter((k) => k.startsWith(LEGACY_PREFIX));
+    const dayKeys = keys
+      .filter((k) => k.startsWith(PREFIX + 'day_'))
+      .sort()
+      .reverse();
+    const old = dayKeys.slice(MAX_DAY_KEYS);
+    if (legacy.length + old.length > 0) await AsyncStorage.multiRemove([...legacy, ...old]);
   } catch {
     // ignore
   }

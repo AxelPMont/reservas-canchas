@@ -1,203 +1,144 @@
+import { Ionicons } from '@expo/vector-icons';
+import Constants from 'expo-constants';
 import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
+  Image,
   KeyboardAvoidingView,
-  ScrollView,
   Platform,
-  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { CourtManagerColors } from '@/constants/theme';
+import { Button, Field } from '@/components/ui';
+import { Colors, Fonts } from '@/constants/theme';
 import { useAuth } from '@/contexts/auth-context';
+import { friendlyError } from '@/lib/errors';
+
+const logo = require('@/assets/images/logo-sport-diamante.png');
 
 export default function AuthScreen() {
-  const [usuario, setUsuario] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [focus, setFocus] = useState<'email' | 'pass' | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const { signIn } = useAuth();
 
   const handleLogin = async () => {
     setError('');
-    if (!usuario.trim() || !password) {
-      setError('Completa usuario y contraseña');
+    if (!email.trim() || !password) {
+      setError('Completa tu correo y contraseña.');
       return;
     }
     setLoading(true);
     try {
-      await signIn(usuario.trim(), password);
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Error al iniciar sesión';
-      setError(msg);
+      await signIn(email.trim(), password);
+    } catch (e) {
+      setError(friendlyError(e, 'No se pudo iniciar sesión.'));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-    >
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-        <View style={styles.logoBox}>
-          <Ionicons name="shield-checkmark" size={40} color="#fff" />
+          <Image source={logo} style={styles.logo} resizeMode="contain" accessibilityLabel="Sport Diamante" />
+          <Text style={styles.tagline}>AGENDA DE CANCHAS</Text>
         </View>
-        <Text style={styles.title}>CourtManager</Text>
-        <Text style={styles.subtitle}>Gestión de canchas deportivas</Text>
-      </View>
 
-      <View style={styles.panel}>
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-
-        <View style={styles.inputWrap}>
-          <Ionicons name="person-outline" size={20} color={CourtManagerColors.textMuted} />
-          <TextInput
-            style={styles.input}
-            placeholder="Usuario (email)"
-            placeholderTextColor={CourtManagerColors.textMuted}
-            value={usuario}
-            onChangeText={setUsuario}
+        <View style={styles.form}>
+          <Field
+            label="Correo"
+            icon="mail-outline"
+            placeholder="empleado@correo.com"
+            value={email}
+            onChangeText={setEmail}
             autoCapitalize="none"
+            autoComplete="email"
             keyboardType="email-address"
+            focused={focus === 'email'}
+            onFocus={() => setFocus('email')}
+            onBlur={() => setFocus(null)}
           />
-        </View>
-        <View style={styles.inputWrap}>
-          <Ionicons name="lock-closed-outline" size={20} color={CourtManagerColors.textMuted} />
-          <TextInput
-            style={styles.input}
-            placeholder="Contraseña"
-            placeholderTextColor={CourtManagerColors.textMuted}
+          <Field
+            label="Contraseña"
+            icon="lock-closed-outline"
+            placeholder="Tu contraseña"
             value={password}
             onChangeText={setPassword}
             secureTextEntry={!showPassword}
+            autoComplete="password"
+            onSubmitEditing={handleLogin}
+            focused={focus === 'pass'}
+            onFocus={() => setFocus('pass')}
+            onBlur={() => setFocus(null)}
+            right={
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                onPress={() => setShowPassword(!showPassword)}
+                hitSlop={12}
+                style={styles.eye}
+              >
+                <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={22} color={Colors.textMuted} />
+              </Pressable>
+            }
           />
-          <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-            <Ionicons
-              name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-              size={22}
-              color={CourtManagerColors.textMuted}
-            />
-          </TouchableOpacity>
+
+          {error ? (
+            <View style={styles.error} accessibilityLiveRegion="polite">
+              <Ionicons name="alert-circle-outline" size={18} color={Colors.dangerText} />
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : null}
+
+          <Button label="Entrar" icon="arrow-forward" onPress={handleLogin} loading={loading} style={{ marginTop: 8 }} />
+          <Text style={styles.hint}>La sesión queda iniciada en este celular.</Text>
         </View>
-        <TouchableOpacity
-          style={styles.primaryButton}
-          onPress={handleLogin}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <>
-              <Text style={styles.primaryButtonText}>Entrar</Text>
-              <Ionicons name="arrow-forward" size={20} color="#fff" />
-            </>
-          )}
-        </TouchableOpacity>
-      </View>
+
+        <Text style={styles.footer}>
+          v{Constants.expoConfig?.version ?? '2.0'} · Solo personal autorizado
+        </Text>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: CourtManagerColors.background,
-    paddingHorizontal: 24,
+  container: { flex: 1, backgroundColor: Colors.background },
+  scroll: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 48, paddingBottom: 32 },
+  header: { alignItems: 'center' },
+  logo: { width: 240, height: 240 },
+  tagline: {
+    fontFamily: Fonts.display,
+    fontSize: 15,
+    letterSpacing: 3,
+    color: Colors.textMuted,
+    marginTop: -16,
   },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    paddingVertical: 40,
-    paddingBottom: 120,
-  },
-  header: {
-    alignItems: 'center',
-    marginBottom: 32,
-  },
-  logoBox: {
-    width: 72,
-    height: 72,
-    borderRadius: 16,
-    backgroundColor: CourtManagerColors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: CourtManagerColors.text,
-    marginBottom: 4,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: CourtManagerColors.textMuted,
-  },
-  panel: {
-    backgroundColor: CourtManagerColors.card,
-    borderRadius: 16,
-    padding: 20,
-  },
+  form: { marginTop: 36, gap: 16 },
+  eye: { width: 40, height: 44, alignItems: 'center', justifyContent: 'center' },
   error: {
-    color: CourtManagerColors.danger,
-    fontSize: 13,
-    marginBottom: 12,
-  },
-  inputWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: CourtManagerColors.surface,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    marginBottom: 14,
-    gap: 10,
-  },
-  input: {
-    flex: 1,
-    color: CourtManagerColors.text,
-    fontSize: 16,
-    paddingVertical: 14,
-  },
-  primaryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: CourtManagerColors.primary,
-    borderRadius: 12,
-    paddingVertical: 16,
-    marginTop: 8,
     gap: 8,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(248,113,113,0.12)',
   },
-  primaryButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  linkWrap: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 20,
-  },
-  linkText: {
-    color: CourtManagerColors.textMuted,
-    fontSize: 14,
-  },
-  link: {
-    color: CourtManagerColors.primary,
-    fontSize: 14,
-    fontWeight: '600',
+  errorText: { flex: 1, color: Colors.dangerText, fontFamily: Fonts.medium, fontSize: 14 },
+  hint: { textAlign: 'center', color: Colors.textMuted, fontFamily: Fonts.regular, fontSize: 13 },
+  footer: {
+    marginTop: 'auto',
+    paddingTop: 32,
+    textAlign: 'center',
+    color: Colors.textFaint,
+    fontFamily: Fonts.regular,
+    fontSize: 13,
   },
 });

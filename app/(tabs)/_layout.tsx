@@ -1,44 +1,42 @@
-import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { CourtManagerColors } from '@/constants/theme';
-import { HeaderLogoutButton } from '@/components/header-logout-button';
+import { Tabs } from 'expo-router';
+import { Colors, Fonts } from '@/constants/theme';
 
 export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        headerShown: true,
-        headerStyle: { backgroundColor: CourtManagerColors.background },
-        headerTintColor: CourtManagerColors.text,
-        headerTitleStyle: { fontWeight: '700', fontSize: 18 },
-        headerShadowVisible: false,
-        headerRight: () => <HeaderLogoutButton />,
+        headerShown: false,
+        sceneStyle: { backgroundColor: Colors.background },
         tabBarStyle: {
-          backgroundColor: CourtManagerColors.surface,
-          borderTopColor: CourtManagerColors.cardBorder,
+          backgroundColor: Colors.tabBar,
+          borderTopColor: Colors.borderSoft,
+          paddingTop: 6,
         },
-        tabBarActiveTintColor: CourtManagerColors.primary,
-        tabBarInactiveTintColor: CourtManagerColors.tabInactive,
-        tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
+        tabBarActiveTintColor: Colors.primary,
+        tabBarInactiveTintColor: Colors.textMuted,
+        tabBarLabelStyle: { fontFamily: Fonts.semibold, fontSize: 12 },
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Reservar Cancha',
-          tabBarLabel: 'Reservar',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="calendar" size={size} color={color} />
-          ),
+          title: 'Agenda',
+          tabBarIcon: ({ color, size }) => <Ionicons name="calendar-outline" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
-        name="mis-reservas"
+        name="reservas"
         options={{
-          title: 'Mis Reservas',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="list" size={size} color={color} />
-          ),
+          title: 'Reservas',
+          tabBarIcon: ({ color, size }) => <Ionicons name="list-outline" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="cuenta"
+        options={{
+          title: 'Cuenta',
+          tabBarIcon: ({ color, size }) => <Ionicons name="person-circle-outline" size={size} color={color} />,
         }}
       />
     </Tabs>

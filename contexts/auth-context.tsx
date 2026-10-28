@@ -1,6 +1,4 @@
-'use client';
-
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import {
   User,
   onAuthStateChanged,
@@ -9,10 +7,17 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
+import type { Actor } from '@/lib/reservations';
+import type { UserRole } from '@/types/reservation';
+
+type UserProfile = { displayName: string; username: string; role: UserRole };
 
 type AuthContextType = {
   user: User | null;
-  userProfile: { displayName: string; username: string } | null;
+  userProfile: UserProfile | null;
+  /** Usuario actual para registrar quién crea o edita reservas. */
+  actor: Actor | null;
+  isAdmin: boolean;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -22,25 +27,25 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [userProfile, setUserProfile] = useState<{ displayName: string; username: string } | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       setUser(u ?? null);
       if (u) {
-        const profileRef = doc(db, 'users', u.uid);
-        const snap = await getDoc(profileRef);
-        if (snap.exists()) {
+        const fallbackName = u.displayName || u.email?.split('@')[0] || 'Usuario';
+        try {
+          const snap = await getDoc(doc(db, 'users', u.uid));
+          const data = snap.exists() ? snap.data() : {};
           setUserProfile({
-            displayName: snap.data().displayName ?? '',
-            username: snap.data().username ?? '',
+            displayName: data.displayName || fallbackName,
+            username: data.username || u.email?.split('@')[0] || '',
+            // Sin rol asignado se trata como empleado (no puede eliminar).
+            role: data.role === 'admin' ? 'admin' : 'empleado',
           });
-        } else {
-          setUserProfile({
-            displayName: u.displayName ?? '',
-            username: u.email?.split('@')[0] ?? '',
-          });
+        } catch {
+          setUserProfile({ displayName: fallbackName, username: '', role: 'empleado' });
         }
       } else {
         setUserProfile(null);
@@ -50,21 +55,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => unsub();
   }, []);
 
-  const signIn = async (email: string, password: string) => {
-    await signInWithEmailAndPassword(auth, email, password);
-  };
-
-  const signOut = async () => {
-    await firebaseSignOut(auth);
-  };
-
-  return (
-    <AuthContext.Provider
-      value={{ user, userProfile, loading, signIn, signOut }}
-    >
-      {children}
-    </AuthContext.Provider>
+  const value = useMemo<AuthContextType>(
+    () => ({
+      user,
+      userProfile,
+      actor: user && userProfile ? { uid: user.uid, name: userProfile.displayName } : null,
+      isAdmin: userProfile?.role === 'admin',
+      loading,
+      signIn: async (email, password) => {
+        await signInWithEmailAndPassword(auth, email, password);
+      },
+      signOut: async () => {
+        await firebaseSignOut(auth);
+      },
+    }),
+    [user, userProfile, loading]
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {
