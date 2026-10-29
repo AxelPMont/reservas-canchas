@@ -33,7 +33,6 @@ import {
   formatDuration,
   formatTimeForChip,
   formatTimeRange,
-  isSlotInPast,
   isSlotOccupied,
   rangesOverlap,
   reservationRange,
@@ -58,7 +57,7 @@ const PERIODS: { id: Period; label: string; from: number; to: number }[] = [
   { id: 'night', label: 'Noche', from: 18 * 60, to: CLOSING_MINUTES },
 ];
 
-type SlotKind = 'free' | 'busy' | 'short' | 'past' | 'selected';
+type SlotKind = 'free' | 'busy' | 'short' | 'selected';
 
 function periodFor(minutes: number): Period {
   if (minutes < 12 * 60) return 'morning';
@@ -100,14 +99,10 @@ export function ReservationFormScreen({ mode, initial, editing }: Props) {
     [dayReservations, courtId, editing?.id]
   );
 
-  const isOriginalSlot = (t: string) =>
-    !!editing && editing.date === date && editing.startTime === t;
-
   const slotKind = (t: string): { kind: SlotKind; sub?: string } => {
     const start = timeToMinutes(t);
     const blocking = others.find((r) => rangesOverlap([start, start + 30], reservationRange(r)));
     if (blocking) return { kind: 'busy', sub: blocking.clientName };
-    if (isSlotInPast(date, t) && !isOriginalSlot(t)) return { kind: 'past', sub: 'ya pasó' };
     if (!fitsBeforeClosing(t, duration)) return { kind: 'short', sub: 'cierra 12 AM' };
     if (isSlotOccupied(t, duration, others).occupied) return { kind: 'short', sub: 'no alcanza' };
     return { kind: t === startTime ? 'selected' : 'free' };
@@ -468,7 +463,6 @@ const slotStyles: Record<SlotKind, { box: object; color: string }> = {
     color: Colors.dangerText,
   },
   short: { box: { borderWidth: 1, borderColor: Colors.borderDashed, borderStyle: 'dashed' }, color: Colors.textFaint },
-  past: { box: { backgroundColor: Colors.surface, opacity: 0.45 }, color: Colors.textMuted },
   selected: { box: { backgroundColor: Colors.primary }, color: Colors.onPrimary },
 };
 

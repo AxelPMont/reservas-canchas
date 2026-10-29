@@ -48,7 +48,6 @@ export function fitsBeforeClosing(slotStart: string, durationMinutes: number): b
   return timeToMinutes(slotStart) + durationMinutes <= CLOSING_MINUTES;
 }
 
-/** true si el inicio del turno ya pasó. */
 /** Fecha y hora en que termina la reserva. */
 export function reservationEndDate(r: { date: string; startTime: string; durationMinutes: number }): Date {
   const end = parseLocalDate(r.date);
@@ -62,12 +61,6 @@ export function isReservationFinished(
   now: Date = new Date()
 ): boolean {
   return reservationEndDate(r).getTime() <= now.getTime();
-}
-
-export function isSlotInPast(dateStr: string, slotStart: string, now: Date = new Date()): boolean {
-  const start = parseLocalDate(dateStr);
-  start.setMinutes(timeToMinutes(slotStart));
-  return start.getTime() <= now.getTime();
 }
 
 /** Formato 12h para chips y etiquetas (24:00 = medianoche = 12:00 AM) */
